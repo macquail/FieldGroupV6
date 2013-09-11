@@ -1,8 +1,13 @@
 package com.macquail.vaadin6.data.fieldgroup;
 
 import java.io.Serializable;
+import java.net.BindException;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.logging.Logger;
 
 import com.vaadin.data.Item;
@@ -17,7 +22,9 @@ public class FieldGroupV6 implements Serializable {
 
 	private boolean enabled = true;
 	private boolean readOnly = false;
-
+	
+	private Map<Field, Object> fieldToPropertyId = new HashMap<>();
+	private Map<Object, Field> propertyIdToField = new LinkedHashMap<>();
 	private List<CommitHandler> commitHandlers = new ArrayList<CommitHandler>();
 	
     public FieldGroupV6(Item itemDataSource) {
@@ -47,7 +54,8 @@ public class FieldGroupV6 implements Serializable {
 
         this.buffered = buffered;
         for (Field field : getFields()) {
-            field.setBuffered(buffered);
+            field.setReadThrough(!buffered);
+            field.setWriteThrough(!buffered);
         }
     }
     
@@ -75,6 +83,27 @@ public class FieldGroupV6 implements Serializable {
                 field.setReadOnly(true);
             }
         }
+    }
+    
+    public Collection<Field> getFields() {
+        return fieldToPropertyId.keySet();
+    }
+    
+    public void bind(Field field, Object propertyId) throws BindException {
+        if (propertyIdToField.containsKey(propertyId)
+                && propertyIdToField.get(propertyId) != field) {
+            throw new BindException("Property id " + propertyId
+                    + " is already bound to another field");
+        }
+        fieldToPropertyId.put(field, propertyId);
+        propertyIdToField.put(propertyId, field);
+        if (itemDataSource == null) {
+            // Will be bound when data source is set
+            return;
+        }
+
+        field.setPropertyDataSource(wrapInTransactionalProperty(getItemProperty(propertyId)));
+        configureField(field);
     }
     
 	/**
