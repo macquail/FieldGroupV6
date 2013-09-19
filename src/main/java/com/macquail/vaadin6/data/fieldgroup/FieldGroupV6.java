@@ -1,7 +1,6 @@
 package com.macquail.vaadin6.data.fieldgroup;
 
 import java.io.Serializable;
-import java.net.BindException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -10,7 +9,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.logging.Logger;
 
+import com.macquail.vaadin6.data.transactionalproperty.TransactionalProperty;
+import com.macquail.vaadin6.data.transactionalproperty.TransactionalPropertyWrapper;
 import com.vaadin.data.Item;
+import com.vaadin.data.Property;
 import com.vaadin.ui.Field;
 
 public class FieldGroupV6 implements Serializable {
@@ -54,10 +56,14 @@ public class FieldGroupV6 implements Serializable {
 
         this.buffered = buffered;
         for (Field field : getFields()) {
-            field.setReadThrough(!buffered);
-            field.setWriteThrough(!buffered);
+            setFieldBuffered(field, buffered);
         }
     }
+
+	private void setFieldBuffered(Field field, boolean buffered) {
+		field.setReadThrough(!buffered);
+		field.setWriteThrough(!buffered);
+	}
     
     public boolean isEnabled() {
         return enabled;
@@ -104,6 +110,25 @@ public class FieldGroupV6 implements Serializable {
 
         field.setPropertyDataSource(wrapInTransactionalProperty(getItemProperty(propertyId)));
         configureField(field);
+    }
+    
+    protected Property getItemProperty(Object propertyId) throws BindException {
+        Item item = getItemDataSource();
+        if (item == null) {
+            throw new BindException("Could not lookup property with id "
+                    + propertyId + " as no item has been set");
+        }
+        Property p = item.getItemProperty(propertyId);
+        if (p == null) {
+            throw new BindException("A property with id " + propertyId
+                    + " was not found in the item");
+        }
+        return p;
+    }
+    
+    private  TransactionalProperty wrapInTransactionalProperty(
+            Property itemProperty) {
+        return new TransactionalPropertyWrapper(itemProperty);
     }
     
 	/**
@@ -176,4 +201,39 @@ public class FieldGroupV6 implements Serializable {
 		}
 
 	}
+	
+    public static class BindException extends RuntimeException {
+
+        public BindException(String message) {
+            super(message);
+        }
+
+        public BindException(String message, Throwable t) {
+            super(message, t);
+        }
+
+    }
+    
+    /**
+     * Configures a field with the settings set for this FieldBinder.
+     * <p>
+     * By default this updates the buffered, read only and enabled state of the
+     * field. Also adds validators when applicable. Fields with read only data
+     * source are always configured as read only.
+     * 
+     * @param field
+     *            The field to update
+     */
+    protected void configureField(Field field) {
+        setFieldBuffered(field, isBuffered());
+        
+
+        field.setEnabled(isEnabled());
+
+        if (field.getPropertyDataSource().isReadOnly()) {
+            field.setReadOnly(true);
+        } else {
+            field.setReadOnly(isReadOnly());
+        }
+    }
 }
